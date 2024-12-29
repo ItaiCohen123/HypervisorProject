@@ -89,7 +89,7 @@ PrintAppearance()
 }
 
 bool
-TestIOCTL(HANDLE hDriver) {
+CommunicationWithDriver(HANDLE hDriver) {
 
     
     ULONG BytesReturned;
@@ -194,7 +194,7 @@ main()
 
   
 
-    bool result = TestIOCTL(drvHandle);
+    bool result = CommunicationWithDriver(drvHandle);
 
     if (!result) {
         printf("***Couldn't test IOCTL, DeviceIOControl function failed");
