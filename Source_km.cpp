@@ -123,7 +123,6 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
     ULONG              InBufLength;               // Input buffer length
     ULONG              OutBufLength;              // Output buffer length
     PCHAR              InBuf, OutBuf;             // pointer to Input and output buffer
-    int res;
     //PCHAR              Buffer = NULL;
 
     UNREFERENCED_PARAMETER(DeviceObject);
@@ -164,10 +163,13 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             OutBuf = (char*)Irp->AssociatedIrp.SystemBuffer;
             DbgPrint("--Input from user: %s", InBuf);
 
+            /* 
+                This is a very convinient way of recieving input from user.
+                In the future when I will have GUI when the user clicks a button I can transfer information
+                to the driver using this function.
+                For example: start vm, stop vm, take snapshot...
 
-
-            res = strcpy_s(OutBuf, sizeof(OutBuf), "This String is from Device Driver !!!\n");
-
+            */
           
 
 
