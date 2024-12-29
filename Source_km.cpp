@@ -117,15 +117,13 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
 
     DbgPrint("[*] DrvIoctlDispatcher called");
-    char str[] = "This String is from Device Driver !!!";
 
     PIO_STACK_LOCATION IrpStack;                  // Pointer to current stack location
     NTSTATUS           NtStatus = STATUS_SUCCESS; // Assume success
     ULONG              InBufLength;               // Input buffer length
     ULONG              OutBufLength;              // Output buffer length
     PCHAR              InBuf, OutBuf;             // pointer to Input and output buffer
-    PCHAR              Data = str;
-    size_t             DataLen = strlen(Data) + 1; // Length of data including null
+    int res;
     //PCHAR              Buffer = NULL;
 
     UNREFERENCED_PARAMETER(DeviceObject);
@@ -166,10 +164,15 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             OutBuf = (char*)Irp->AssociatedIrp.SystemBuffer;
             DbgPrint("--Input from user: %s", InBuf);
 
-            RtlCopyBytes(OutBuf, Data, OutBufLength);   
 
 
-            Irp->IoStatus.Information = (OutBufLength < DataLen ? OutBufLength : DataLen);
+            res = strcpy_s(OutBuf, sizeof(OutBuf), "This String is from Device Driver !!!\n");
+
+          
+
+
+
+            Irp->IoStatus.Information = (OutBufLength);
 
 
             break;
@@ -408,10 +411,10 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 
 
 
-        int ProcessorID = 0;
+       /* int ProcessorID = 0;
 
         LaunchVm(ProcessorID, EPTP);
-        
+        */
         
     }
     __except (GetExceptionCode())
