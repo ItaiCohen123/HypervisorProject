@@ -101,10 +101,12 @@ TestIOCTL(HANDLE hDriver) {
     // Performing METHOD_BUFFERED
     //
     
-    int res = strcpy_s(InputBuffer, sizeof(InputBuffer), "This String is from User Application; using METHOD_BUFFERED\n");
+    printf("enter message for hypervisor: \n");
+    char* res = fgets(InputBuffer, sizeof(InputBuffer), stdin);
 
-    if (res != 0) {
-        printf("strcpy_s failed");
+
+    if (res == 0) {
+        printf("fgets failed");
         return 1;
     }
 
