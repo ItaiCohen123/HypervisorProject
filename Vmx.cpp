@@ -397,7 +397,9 @@ SetupVmcs(VIRTUAL_MACHINE_STATE* GuestState, PEPTP EPTP) {
 
 
     __vmx_vmwrite(GUEST_RSP, (ULONG64)g_VirtualGuestMemoryAddress); // setup guest sp
-    __vmx_vmwrite(GUEST_RIP, (ULONG64)g_VirtualGuestMemoryAddress); // setup guest ip
+    
+    // Execute the guest code by setting the guest ip to the address of the code
+    __vmx_vmwrite(GUEST_RIP, (ULONG64)g_VirtualGuestMemoryAddress); 
 
     __vmx_vmwrite(HOST_RSP, ((ULONG64)GuestState->vmmStack + VMM_STACK_SIZE - 1));
     __vmx_vmwrite(HOST_RIP, (ULONG64)asmVmexitHandler);
@@ -444,6 +446,11 @@ LaunchVm(int ProcessorID, PEPTP EPTP)
     RtlZeroMemory((void*)g_GuestState[ProcessorID].MsrBitMap, PAGE_SIZE);
     g_GuestState[ProcessorID].MsrBitMapPhysical = VirtualToPhysicalAddress((void*)g_GuestState[ProcessorID].MsrBitMap);
 
+
+
+    // Everything above this is probably ok
+
+
     //
     // Clear the VMCS State
     //
@@ -469,7 +476,15 @@ LaunchVm(int ProcessorID, PEPTP EPTP)
 
     AsmSaveStateForVmxoff();
 
-    __vmx_vmlaunch(); // Places the calling app in VMX non-root operation state (VM enter) by using current VMCS
+    // vmlaunch Places the calling app in VMX non-root operation state (VM enter) by using current VMCS
+
+    if (__vmx_vmlaunch() != 0) {
+        UINT64 error;
+        __vmx_vmread(VM_INSTRUCTION_ERROR, &error);
+        DbgPrint("[*] VMLAUNCH failed with error code: %llu\n", error);
+        goto ErrorReturn;
+    }
+
 
     //
     // if VMLAUNCH succeeds will never be here!
@@ -481,7 +496,6 @@ LaunchVm(int ProcessorID, PEPTP EPTP)
     DbgPrint("\n===================================================================\n");
 
 
-    __vmx_off();
     DbgPrint("[*] VMXOFF Executed Successfully. !\n");
 
     return TRUE;
@@ -492,6 +506,14 @@ LaunchVm(int ProcessorID, PEPTP EPTP)
     // Return With Error
     //
 ErrorReturn:
+
+    if (g_GuestState[ProcessorID].vmmStack) {
+        ExFreePool((void*)g_GuestState[ProcessorID].vmmStack);
+    }
+    if (g_GuestState[ProcessorID].MsrBitMap) {
+        MmFreeNonCachedMemory((void*)g_GuestState[ProcessorID].MsrBitMap, PAGE_SIZE);
+    }
+
 
     DbgPrint("[*] Fail to setup VMCS !\n");
     return FALSE;   
