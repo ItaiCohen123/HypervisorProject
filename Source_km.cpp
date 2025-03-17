@@ -6,6 +6,7 @@
 #include "EPT.h"
 
 
+
 #define IOCTL_Device_Function CTL_CODE(DeviceType, Function, Method, Access)
 
 //defining all the IOCTL control codes:
@@ -15,42 +16,44 @@
 #define IOCTL_SIOCTL_METHOD_IN_DIRECT CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_IN_DIRECT, FILE_ANY_ACCESS)
 #define IOCTL_SIOCTL_METHOD_OUT_DIRECT CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
+int proccessId = 0;
+//PEPTP EPTP = NULL;
 
 
 
+BOOLEAN
+StartVM(ULONG64 function) {
 
-extern "C" long long AsmEnableVmxOperation(void);
 
-VOID
-PrintIrpInfo(PIRP Irp)
+
+    
+
+
+    // LaunchVm(proccessId, EPTP, function);
+     proccessId++;
+
+    return TRUE;
+
+}
+BOOLEAN CloseVm()
 {
+
     /*
-        this function prints information about the Irp, input buffers, sizes
+    
+        more logic about vm exit
+        - trigger vm exit
+        - modify vmcs so execution can't resume
+    
     */
 
-    PIO_STACK_LOCATION  IrpStack;
-    IrpStack = IoGetCurrentIrpStackLocation(Irp);
-
-    PAGED_CODE();
-
-    // print the input buffer
-    DbgPrint("\tIrp->AssociatedIrp.SystemBuffer = 0x%p\n", Irp->AssociatedIrp.SystemBuffer);
-
-    // output buffer
-    DbgPrint("\tIrp->UserBuffer = 0x%p\n", Irp->UserBuffer);
-
-    // print input buffer in method neither
-    DbgPrint("\tIrpStack->Parameters.DeviceIoControl.Type3InputBuffer = 0x%p\n", IrpStack->Parameters.DeviceIoControl.Type3InputBuffer);
-
-    // print input buffer size
-    DbgPrint("\tIrpStack->Parameters.DeviceIoControl.InputBufferLength = %d\n", IrpStack->Parameters.DeviceIoControl.InputBufferLength);
-
-    // print output buffer size
-    DbgPrint("\tIrpStack->Parameters.DeviceIoControl.OutputBufferLength = %d\n", IrpStack->Parameters.DeviceIoControl.OutputBufferLength);
+    DbgPrint("[*] successfully closed vm ");
 
 
-    return;
+    return TRUE;
+
+
 }
+
 
 NTSTATUS
 DrvUnsupported(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
@@ -67,19 +70,6 @@ DrvUnsupported(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
     return STATUS_SUCCESS;
 }
 
-NTSTATUS
-DrvRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
-{
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    DbgPrint("[*] DrvRead called");
-
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = 0;
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return STATUS_SUCCESS;
-}
 
 NTSTATUS
 DrvCreate(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
@@ -157,11 +147,43 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
             */
             DbgPrint("[*] Method Buffered used");
-           // PrintIrpInfo(Irp);
 
             InBuf = (char*)Irp->AssociatedIrp.SystemBuffer;
             OutBuf = (char*)Irp->AssociatedIrp.SystemBuffer;
             DbgPrint("--Input from user: %s", InBuf);
+
+            if (strcmp(InBuf, "NOP") == 0) {
+
+                DbgPrint("[*] Executing %s in guest", InBuf);
+                BOOLEAN result = StartVM((ULONG64)AsmHltInst);
+
+                if (!result) {
+                    DbgPrint("[*] couldn't start VM");
+                    break;
+                }
+            }
+            if (strcmp(InBuf, "RDTS") == 0) {
+
+                DbgPrint("[*] Executing %s in guest", InBuf);
+                BOOLEAN result = StartVM((ULONG64)ReadTimeStamp);
+
+                if (!result) {
+                    DbgPrint("[*] couldn't start VM");
+                    break;
+                }
+            }
+            else if (strcmp(InBuf, "CLOSEVM") == 0) 
+            {
+
+                BOOLEAN result = CloseVm();
+
+                if (!result) {
+                    DbgPrint("[*] couldn't close VM");
+                    break;
+                }
+
+            }
+
 
             /* 
                 This is a very convinient way of recieving input from user.
@@ -190,7 +212,6 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             */
         
             DbgPrint("[*] Method Neither used");
-            PrintIrpInfo(Irp);
 
 
 
@@ -205,7 +226,6 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             */
         
             DbgPrint("[*] Method In Direct used");
-            PrintIrpInfo(Irp);
 
 
             break;
@@ -219,7 +239,6 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             */
         
             DbgPrint("[*] Method Out Direct used");
-            PrintIrpInfo(Irp);
 
 
             break;
@@ -248,31 +267,14 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
 
 NTSTATUS
-DrvWrite(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
-{
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    DbgPrint("[*] DrvWrite called");
-
-    Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = 0;
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
 DrvClose(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 {
     UNREFERENCED_PARAMETER(DeviceObject);
 
     DbgPrint("[*] DrvClose called");
 
-    //
-  // executing VMXOFF on every logical processor
-  //
     TerminateVmx();
-    DbgPrint("[*] VMXOFF called");
+
 
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -286,23 +288,19 @@ VOID
 DrvUnload(PDRIVER_OBJECT DriverObject)
 {
 
-    /*
     
-        called when the driver is ending (by um request)
-    
-    */
 
     UNICODE_STRING DosDeviceName;
 
     DbgPrint("DrvUnload Called !");
+
+
 
     RtlInitUnicodeString(&DosDeviceName, L"\\DosDevices\\MyHypervisor");
 
     IoDeleteSymbolicLink(&DosDeviceName);
     IoDeleteDevice(DriverObject->DeviceObject);
 }
-
-
 
 NTSTATUS
 DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
@@ -352,8 +350,7 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
         DriverObject->MajorFunction[IRP_MJ_CREATE] = DrvCreate;
         DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DrvIoctlDispatcher;
 
-        DriverObject->MajorFunction[IRP_MJ_READ] = DrvRead;
-        DriverObject->MajorFunction[IRP_MJ_WRITE] = DrvWrite;
+       
 
         DriverObject->DriverUnload = DrvUnload;
 
@@ -364,66 +361,21 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
         DbgPrint("[*] There were some errors in creating device.");
     }
 
+    
+        // Initiating EPTP
+        
+    //EPTP = InitializeEptp();
+
+    if (!InitializeVmx())
+    {
+        DbgPrint("[*] couldn't initialize vmx");
+        return FALSE;
+
+    }
+
+    DbgPrint("[*] VMX Initiated Successfully.");
+    DbgPrint("[*] VMXON called");
    
-  
-    __try
-    {
-        //
-        // Initiating EPTP and VMX
-        //
-        PEPTP EPTP = InitializeEptp();
-        UNREFERENCED_PARAMETER(EPTP);
-
-        if (!InitializeVmx())
-        {
-            DbgPrint("[*] couldn't initialize vmx");
-
-        }
-
-        DbgPrint("[*] VMX Initiated Successfully.");
-        DbgPrint("[*] VMXON called");
-
-
-        
-        UINT8 hltInstruction = 0xF4;
-        size_t numberOfCopies = (100 * PAGE_SIZE) - 1; // Number of times the HLT instruction will be copied
-        SIZE_T allocateSize = sizeof(UINT8) * numberOfCopies + 1;
-
-        DbgPrint("[*] Allocating %llu bytes of non-paged memory\n", allocateSize);
-
-        g_VirtualGuestMemoryAddress = (UINT64*)ExAllocatePool2(POOL_FLAG_NON_PAGED, allocateSize, 'tag1');
-        if (g_VirtualGuestMemoryAddress == NULL) {
-            DbgPrint("[*] Failed to allocate virtual guest memory\n");
-            return STATUS_INSUFFICIENT_RESOURCES;
-        }
-
-        DbgPrint("[*] Memory allocated successfully at %p\n", g_VirtualGuestMemoryAddress);
-      
-
-        RtlFillMemory(g_VirtualGuestMemoryAddress, allocateSize, hltInstruction); // Fill memory
-
-
-
-        DbgPrint("[*] Memory filled successfully\n");
-       
-
-        //
-        // Launching VM for Test (in the 0th virtual processor)
-        //
-
-
-
-       /* int ProcessorID = 0;
-
-        LaunchVm(ProcessorID, EPTP);
-        */
-        
-    }
-    __except (GetExceptionCode())
-    {
-        DbgPrint("[*] Couldn't initialize ept and launch vm");
-    }
-
     return NtStatus;
 }
 

@@ -8,11 +8,20 @@
 #define VMCS_SIZE           4096
 #define VMXON_SIZE          4096
 
+
+
+#define VMX_CHECK_SUCCESS(value, field)       \
+    if ((value) != 0) {                       \
+        DbgPrint("[*] VMWRITE failed for %s\n", #field); \
+        return FALSE;                         \
+    }
+
 typedef struct _VIRTUAL_MACHINE_STATE {
 	UINT64 VmxonRegion;			// VMXON region
 	UINT64 VmcsRegion;			// VMCS region
 	UINT64 Eptp;				// Extended Page Table Pointer
 	UINT64 vmmStack;			// Stack for VMM in VM-Exit State
+    UINT64 guestStack;
 	UINT64 MsrBitMap;			// MSR Bitmap Virtual Address
 	UINT64 MsrBitMapPhysical;	// MSR Bitmap Physical Address
 }VIRTUAL_MACHINE_STATE, *PVIRTUAL_MACHINE_STATE;
@@ -128,6 +137,8 @@ extern UINT64* g_VirtualGuestMemoryAddress;
 
 
 extern "C" long long AsmEnableVmxOperation(void);
+extern "C" long long AsmHltInst(void);
+extern "C" long long ReadTimeStamp(void);
 extern "C" long long AsmSaveStateForVmxoff(void);
 extern "C" long long AsmVmxoffAndRestoreState(void);
 extern "C" USHORT GetEs(void);
@@ -440,6 +451,13 @@ RunOnEachLogicalProcessor(void* (*FunctionPtr)());
 
 int
 MathPower(int Base, size_t Exponent);
+
+NTSTATUS
+LogMessage(LPCSTR fileName, LPCSTR msg);
+
+
+
+
 
 
 

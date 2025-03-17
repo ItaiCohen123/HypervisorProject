@@ -2,6 +2,8 @@
 
 
 ;PUBLIC AsmEnableVmxOperation
+;PUBLIC AsmHltInst
+;PUBLIC ReadTimeStamp
 ;PUBLIC AsmSaveStateForVmxoff
 ;PUBLIC AsmVmxoffAndRestoreState
 ;PUBLIC GetCs
@@ -29,11 +31,41 @@ g_BasePointerForReturning dq 0
 .code
 
 
-;------------------------------------------------------------------------
+
 
     VMX_ERROR_CODE_SUCCESS              = 0
     VMX_ERROR_CODE_FAILED_WITH_STATUS   = 1
     VMX_ERROR_CODE_FAILED               = 2
+
+
+
+
+
+;------------------------------------------------------------------------
+
+
+ReadTimeStamp PROC ;PUBLIC
+    
+   RDTSC ; Read the timestamp counter into EDX:EAX (64-bit value)
+    
+ReadTimeStamp ENDP
+
+
+
+;------------------------------------------------------------------------
+
+AsmHltInst PROC ;PUBLIC
+    
+    guest_entry:
+        nop          ; Do nothing, but test if execution reaches here
+        xor rax, rax ; Clear RAX (simple computation test)
+        vmcall       ; Exit back to hypervisor
+        jmp guest_entry  ; If VMX doesn't exit, keep looping
+
+    
+AsmHltInst ENDP
+
+
 
 ;------------------------------------------------------------------------
 

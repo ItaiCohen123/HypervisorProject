@@ -6,6 +6,7 @@
 #include <intrin.h>
 
 
+#define MAXULONG64 ((ULONG64)-1)
 
 
 UINT64
@@ -89,16 +90,19 @@ AllocateVmcsRegion(IN VIRTUAL_MACHINE_STATE* GuestState)
     int    VMCSSize = 2 * VMCS_SIZE;
     BYTE* Buffer = (BYTE*)MmAllocateContiguousMemory(VMCSSize + ALIGNMENT_PAGE_SIZE, PhysicalMax); // Allocating a 4-KByte Contigous Memory region
 
-    PHYSICAL_ADDRESS Highest = { 0 }, Lowest = { 0 };
-    Highest.QuadPart = ~0;
-
-
-    UINT64 PhysicalBuffer = VirtualToPhysicalAddress(Buffer);
     if (Buffer == NULL)
     {
         DbgPrint("[*] Error : Couldn't Allocate Buffer for VMCS Region.");
         return FALSE; // ntStatus = STATUS_INSUFFICIENT_RESOURCES;
     }
+
+    PHYSICAL_ADDRESS Highest = { 0 }, Lowest = { 0 };
+    Highest.QuadPart = ~0;
+
+
+    UINT64 PhysicalBuffer = 0;
+    PhysicalBuffer = VirtualToPhysicalAddress(Buffer);
+    
     // zero-out memory
     RtlSecureZeroMemory(Buffer, VMCSSize + ALIGNMENT_PAGE_SIZE);
     UINT64 AlignedPhysicalBuffer = (UINT64)((ULONG_PTR)(PhysicalBuffer + ALIGNMENT_PAGE_SIZE - 1) & ~(ALIGNMENT_PAGE_SIZE - 1));
