@@ -9,7 +9,6 @@ extern MainVmexitHandler : proc
 .code
 
 asmVmexitHandler proc
-
     push r15
     push r14
     push r13
@@ -21,14 +20,14 @@ asmVmexitHandler proc
     push rdi
     push rsi
     push rbp
-    push rbp    ; rsp
+    push rbp
     push rbx
     push rdx
     push rcx
     push rax    
 
     mov rcx, rsp        ; guestregs
-    sub rsp, 28h
+    sub rsp, 28h        ; Maintain stack alignment (16-byte aligned)
 
     call MainVmexitHandler
     add rsp, 28h    
@@ -37,7 +36,7 @@ asmVmexitHandler proc
     pop rcx
     pop rdx
     pop rbx
-    pop rbp        ; rsp
+    pop rbp
     pop rbp
     pop rsi
     pop rdi 
@@ -51,10 +50,13 @@ asmVmexitHandler proc
     pop r15
 
     sub rsp, 0100h ; to avoid error in future functions
-
+    
     jmp VmResumeInstruction
 
+
+    
 asmVmexitHandler endp
+
 
 
 
