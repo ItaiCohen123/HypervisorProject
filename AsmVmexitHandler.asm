@@ -1,14 +1,17 @@
 ;PUBLIC  asmVmexitHandler
 
 
-extern VmResumeInstruction : proc
 extern MainVmexitHandler : proc
+extern StopExecution : proc
 
 
 
 .code
 
 asmVmexitHandler proc
+
+  
+    ; Save general-purpose registers
     push r15
     push r14
     push r13
@@ -16,30 +19,36 @@ asmVmexitHandler proc
     push r11
     push r10
     push r9
-    push r8        
+    push r8
     push rdi
     push rsi
     push rbp
-    push rbp
+
     push rbx
     push rdx
     push rcx
-    push rax    
+    push rax
 
-    mov rcx, rsp        ; guestregs
-    sub rsp, 28h        ; Maintain stack alignment (16-byte aligned)
+    ; Pass GuestRegs (current RSP points to GuestRegs) to MainVmexitHandler
+    mov rcx, rsp    
 
+    ; Reserve shadow space (Windows x64 calling convention)
+    sub rsp, 20h
+
+    ; Call the C handler
     call MainVmexitHandler
-    add rsp, 28h    
 
+    ; Restore stack
+    add rsp, 20h
+
+    ; Restore general-purpose registers
     pop rax
     pop rcx
     pop rdx
     pop rbx
     pop rbp
-    pop rbp
     pop rsi
-    pop rdi 
+    pop rdi
     pop r8
     pop r9
     pop r10
@@ -49,13 +58,11 @@ asmVmexitHandler proc
     pop r14
     pop r15
 
-    sub rsp, 0100h ; to avoid error in future functions
-    
-    jmp VmResumeInstruction
 
-
-    
 asmVmexitHandler endp
+
+
+
 
 
 

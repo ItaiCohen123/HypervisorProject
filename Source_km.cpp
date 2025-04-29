@@ -16,40 +16,37 @@
 #define IOCTL_SIOCTL_METHOD_IN_DIRECT CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_IN_DIRECT, FILE_ANY_ACCESS)
 #define IOCTL_SIOCTL_METHOD_OUT_DIRECT CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
-int proccessId = 0;
-//PEPTP EPTP = NULL;
+int proccessId = -1;
+PEPTP eptp;
 
 
 
-BOOLEAN
-StartVM(ULONG64 function) {
 
 
+VOID
+StartVM(PVOID function) {
 
+    DbgPrint("[*] inside StartVM ");
     
 
+    proccessId++;
 
-    // LaunchVm(proccessId, EPTP, function);
-     proccessId++;
+    if (proccessId <= 11) {
 
-    return TRUE;
+        bool result;
+        result = LaunchVm(proccessId, eptp, (ULONG64)function);
 
-}
-BOOLEAN CloseVm()
-{
+        if (!result)
+            DbgPrint("[*] An error accured");
 
-    /*
+    }
+    else {
+        DbgPrint("[*] Reached the maximum amount of cpu cores available therefore can't start another vm");
+    }
+
+    PsTerminateSystemThread(STATUS_SUCCESS); // ending thread
+
     
-        more logic about vm exit
-        - trigger vm exit
-        - modify vmcs so execution can't resume
-    
-    */
-
-    DbgPrint("[*] successfully closed vm ");
-
-
-    return TRUE;
 
 
 }
@@ -76,7 +73,7 @@ DrvCreate(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 {
     /*
         
-        this function is called when the user mode application starts it
+        this function is called when the user mode application starts
         
     */
 
@@ -113,7 +110,6 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
     ULONG              InBufLength;               // Input buffer length
     ULONG              OutBufLength;              // Output buffer length
     PCHAR              InBuf, OutBuf;             // pointer to Input and output buffer
-    //PCHAR              Buffer = NULL;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -130,10 +126,7 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
         goto End;
     }
 
-    //
-   // Determine which I/O control code was specified. (buffered/neither/in_direct/out_direct
-   //
-
+ 
   
     switch (IrpStack->Parameters.DeviceIoControl.IoControlCode)
     {
@@ -155,34 +148,111 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             if (strcmp(InBuf, "NOP") == 0) {
 
                 DbgPrint("[*] Executing %s in guest", InBuf);
-                BOOLEAN result = StartVM((ULONG64)AsmHltInst);
+                HANDLE threadHandle;
 
-                if (!result) {
-                    DbgPrint("[*] couldn't start VM");
-                    break;
+                NTSTATUS result = PsCreateSystemThread(
+                    &threadHandle,
+                    THREAD_ALL_ACCESS,
+                    NULL,
+                    NULL,
+                    NULL,
+                    StartVM,
+                    AsmNop
+                );
+
+                if (result != STATUS_SUCCESS) {
+
+                    DbgPrint("Create thread failed!!!");
+
                 }
+                break;
             }
             if (strcmp(InBuf, "RDTS") == 0) {
 
+
+
                 DbgPrint("[*] Executing %s in guest", InBuf);
-                BOOLEAN result = StartVM((ULONG64)ReadTimeStamp);
 
-                if (!result) {
-                    DbgPrint("[*] couldn't start VM");
+                HANDLE threadHandle;
+
+                NTSTATUS result = PsCreateSystemThread(
+                &threadHandle,
+                THREAD_ALL_ACCESS,
+                NULL,
+                NULL,
+                NULL,
+                StartVM,
+                AsmReadTimeStamp
+                );
+
+                if (result != STATUS_SUCCESS) {
+
+                    DbgPrint("Create thread failed!!!");
                     break;
                 }
+
+                DbgPrint("[*] Created Thread Successfully");
+
+                break;
+               
             }
-            else if (strcmp(InBuf, "CLOSEVM") == 0) 
-            {
+            if (strcmp(InBuf, "ADD") == 0) {
 
-                BOOLEAN result = CloseVm();
 
-                if (!result) {
-                    DbgPrint("[*] couldn't close VM");
+
+                DbgPrint("[*] Executing %s in guest", InBuf);
+
+                HANDLE threadHandle;
+
+                NTSTATUS result = PsCreateSystemThread(
+                    &threadHandle,
+                    THREAD_ALL_ACCESS,
+                    NULL,
+                    NULL,
+                    NULL,
+                    StartVM,
+                    AsmAdd
+                );
+
+                if (result != STATUS_SUCCESS) {
+
+                    DbgPrint("Create thread failed!!!");
                     break;
                 }
 
+                DbgPrint("[*] Created Thread Successfully");
+
+                break;
+
             }
+            if (strcmp(InBuf, "XOR") == 0) {
+
+                DbgPrint("[*] Executing %s in guest", InBuf);
+
+                HANDLE threadHandle;
+
+                NTSTATUS result = PsCreateSystemThread(
+                    &threadHandle,
+                    THREAD_ALL_ACCESS,
+                    NULL,
+                    NULL,
+                    NULL,
+                    StartVM,
+                    AsmXor
+                );
+
+                if (result != STATUS_SUCCESS) {
+
+                    DbgPrint("Create thread failed!!!");
+                    break;
+                }
+
+                DbgPrint("[*] Created Thread Successfully");
+
+                break;
+
+            }
+           
 
 
             /* 
@@ -201,47 +271,6 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
             break;
 
-        case IOCTL_SIOCTL_METHOD_NEITHER: // method neither
-            /*
-                
-                This method is neither buffered nor direct I/O.
-                The I/O manager does not provide any system buffers,
-                and the IRP provides the user-mode virtual addresses of the input and output buffers
-                without validating or mapping them.
-            
-            */
-        
-            DbgPrint("[*] Method Neither used");
-
-
-
-            break;
-
-        case IOCTL_SIOCTL_METHOD_IN_DIRECT: // method in direct
-            /*
-                
-                This type is generally used for reading or writing large amounts of data 
-                that must be transferred fast as it won’t copy the data and instead shares the pages.
-            
-            */
-        
-            DbgPrint("[*] Method In Direct used");
-
-
-            break;
-
-        case IOCTL_SIOCTL_METHOD_OUT_DIRECT: // method out direct
-            /*
-                
-                This type is generally used for reading or writing large amounts of data 
-                that must be transferred fast as it won’t copy the data and instead shares the pages.
-            
-            */
-        
-            DbgPrint("[*] Method Out Direct used");
-
-
-            break;
 
         default:
 
@@ -249,8 +278,7 @@ DrvIoctlDispatcher(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
             // The specified I/O control code is unrecognized by this driver.
             //
             NtStatus = STATUS_INVALID_DEVICE_REQUEST;
-            DbgPrint("ERROR: unrecognized IOCTL %x\n",
-                IrpStack->Parameters.DeviceIoControl.IoControlCode);
+            DbgPrint("This method is not supported");
             break;
     }
 
@@ -273,7 +301,7 @@ DrvClose(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp)
 
     DbgPrint("[*] DrvClose called");
 
-    TerminateVmx();
+    
 
 
 
@@ -293,7 +321,7 @@ DrvUnload(PDRIVER_OBJECT DriverObject)
     UNICODE_STRING DosDeviceName;
 
     DbgPrint("DrvUnload Called !");
-
+    TerminateVmx();
 
 
     RtlInitUnicodeString(&DosDeviceName, L"\\DosDevices\\MyHypervisor");
@@ -306,6 +334,8 @@ NTSTATUS
 DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
 
+   
+
     /*
     
         this function is called when the driver is first loaded
@@ -314,7 +344,11 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     */
 
 
+
     UNREFERENCED_PARAMETER(RegistryPath);
+
+    
+
     NTSTATUS       NtStatus = STATUS_SUCCESS;
     PDEVICE_OBJECT DeviceObject = NULL;
     UINT64 Index = 0;
@@ -364,7 +398,7 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     
         // Initiating EPTP
         
-    //EPTP = InitializeEptp();
+    eptp = InitializeEptp();
 
     if (!InitializeVmx())
     {
@@ -375,6 +409,9 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 
     DbgPrint("[*] VMX Initiated Successfully.");
     DbgPrint("[*] VMXON called");
+
+    
+    
    
     return NtStatus;
 }

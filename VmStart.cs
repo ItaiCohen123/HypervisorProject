@@ -98,7 +98,7 @@ namespace HypervisorApp
         {
             for(int i = 0; i < NUM_VMS_MAX; i++)
             {
-                if (Convert.ToInt32(vmLabels[i].Tag) != 10)
+                if (Convert.ToInt32(vmLabels[i].Tag) != 0)
                 {
                     return i;
                 }
@@ -134,8 +134,8 @@ namespace HypervisorApp
             vmStatusLabel.Text = $"Virual Machine {vmStatusLabel.Tag}: {functionChosen}, status: Active";
             vmStatusLabel.Visible = true;
             vmStatusLabel.BackColor = Color.SpringGreen;
-            vmStatusLabel.Tag = 10;
-
+            vmStatusLabel.Tag = 0;
+            
         }
         public void DeactiveLable()
         {

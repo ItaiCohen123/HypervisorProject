@@ -132,13 +132,16 @@ extern VIRTUAL_MACHINE_STATE* g_GuestState;
 extern UINT64* g_VirtualGuestMemoryAddress;
 
 
+
 #define POOLTAG 0x48564653 
 #define VMM_STACK_SIZE 0x8000
 
 
 extern "C" long long AsmEnableVmxOperation(void);
-extern "C" long long AsmHltInst(void);
-extern "C" long long ReadTimeStamp(void);
+extern "C" long long AsmNop(void);
+extern "C" long long AsmReadTimeStamp(void);
+extern "C" long long AsmAdd(void);
+extern "C" long long AsmXor(void);
 extern "C" long long AsmSaveStateForVmxoff(void);
 extern "C" long long AsmVmxoffAndRestoreState(void);
 extern "C" USHORT GetEs(void);
@@ -155,10 +158,13 @@ extern "C" short GetGdtLimit(void);
 extern "C" short GetIdtLimit(void);
 extern "C" long long GetRflags(void);
 extern "C" long asmVmexitHandler(void);
+extern "C" long long GetRsp(void);
 
 
-extern "C" VOID VmResumeInstruction(void);
+
 extern "C" VOID MainVmexitHandler(PGUEST_REGS GuestRegs);
+extern "C" VOID StopExecution(int seconds);
+extern "C" VOID DrvUnload(PDRIVER_OBJECT DriverObject);
 
 
 
@@ -426,7 +432,7 @@ BOOLEAN
 InitializeVmx();
 
 BOOLEAN
-LaunchVm(int ProcessorID, PEPTP EPTP);
+LaunchVm(int ProcessorID, PEPTP EPTP, ULONG64 function);
 
 BOOLEAN
 ClearVmcsState(VIRTUAL_MACHINE_STATE* GuestState);
@@ -446,14 +452,18 @@ AllocateVmxonRegion(IN VIRTUAL_MACHINE_STATE* GuestState);
 BOOLEAN
 AllocateVmcsRegion(IN VIRTUAL_MACHINE_STATE* GuestState);
 
-void
-RunOnEachLogicalProcessor(void* (*FunctionPtr)());
-
 int
 MathPower(int Base, size_t Exponent);
 
 NTSTATUS
 LogMessage(LPCSTR fileName, LPCSTR msg);
+
+VOID
+StopExecution(int seconds);
+
+VOID
+TerminateSingleThread(VIRTUAL_MACHINE_STATE* GuestState);
+
 
 
 

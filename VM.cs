@@ -105,6 +105,10 @@ namespace HypervisorApp
 
             timeStampButton.Enabled = false;
             NopButton.Enabled = false;
+            XorButton.Enabled = false;
+            AddButton.Enabled = false;
+
+
 
             this.vm.functionChosen = "NOP";
             this.vm.CreateLable();
@@ -134,12 +138,74 @@ namespace HypervisorApp
 
             timeStampButton.Enabled = false;
             NopButton.Enabled = false;
+            XorButton.Enabled = false;
+            AddButton.Enabled = false;
+
+
 
             this.vm.functionChosen = "Read Time Stamp";
             this.vm.CreateLable();
         }
+        private void XorButton_Click(object sender, EventArgs e)
+        {
+            string message = "XOR";
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            IntPtr inputBuffer = Marshal.AllocHGlobal(messageBytes.Length);
+            Marshal.Copy(messageBytes, 0, inputBuffer, messageBytes.Length);
+            IntPtr outputBuffer = Marshal.AllocHGlobal(messageBytes.Length);
+            uint bytesReturned;
 
-      
+
+            bool result = WinApi.DeviceIoControl(
+                hDrv,
+                WinApi.BUILD_CTL_CODE(FILE_DEVICE_UNKNOWN, FUNCTION, METHOD_BUFFERED, FILE_ANY_ACCESS),
+                inputBuffer,
+                (uint)messageBytes.Length,
+                outputBuffer,
+                (uint)messageBytes.Length,
+                out bytesReturned,
+                IntPtr.Zero
+                );
+
+            timeStampButton.Enabled = false;
+            NopButton.Enabled = false;
+            XorButton.Enabled = false;
+            AddButton.Enabled = false;
+
+            this.vm.functionChosen = "XOR";
+            this.vm.CreateLable();
+        }
+        private void AddButton_Click(object sender, EventArgs e)
+        {
+            string message = "ADD";
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+            IntPtr inputBuffer = Marshal.AllocHGlobal(messageBytes.Length);
+            Marshal.Copy(messageBytes, 0, inputBuffer, messageBytes.Length);
+            IntPtr outputBuffer = Marshal.AllocHGlobal(messageBytes.Length);
+            uint bytesReturned;
+
+
+            bool result = WinApi.DeviceIoControl(
+                hDrv,
+                WinApi.BUILD_CTL_CODE(FILE_DEVICE_UNKNOWN, FUNCTION, METHOD_BUFFERED, FILE_ANY_ACCESS),
+                inputBuffer,
+                (uint)messageBytes.Length,
+                outputBuffer,
+                (uint)messageBytes.Length,
+                out bytesReturned,
+                IntPtr.Zero
+                );
+
+            timeStampButton.Enabled = false;
+            NopButton.Enabled = false;
+            XorButton.Enabled = false;
+            AddButton.Enabled = false;
+
+            this.vm.functionChosen = "ADD";
+            this.vm.CreateLable();
+        }
+
+
         private void timeStampButton_MouseLeave(object sender, EventArgs e)
         {
             rdstInfoLabel.Visible = false;
@@ -155,6 +221,27 @@ namespace HypervisorApp
         private void NopButton_MouseLeave(object sender, EventArgs e)
         {
             nopLabel.Visible = false;
+        }
+
+        private void XorButton_MouseMove(object sender, MouseEventArgs e)
+        {
+            XorInfoLabel.Visible = true;
+        }
+
+        private void XorButton_MouseLeave(object sender, EventArgs e)
+        {
+            XorInfoLabel.Visible = false;
+        }
+
+        private void AddButton_MouseMove(object sender, MouseEventArgs e)
+        {
+            AddInfoLabel.Visible = true;
+
+        }
+
+        private void AddButton_MouseLeave(object sender, EventArgs e)
+        {
+            AddInfoLabel.Visible = false;
         }
     }
 }

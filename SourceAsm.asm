@@ -2,8 +2,10 @@
 
 
 ;PUBLIC AsmEnableVmxOperation
-;PUBLIC AsmHltInst
-;PUBLIC ReadTimeStamp
+;PUBLIC AsmNop
+;PUBLIC AsmReadTimeStamp
+;PUBLIC AsmAdd
+;PUBLIC AsmXor
 ;PUBLIC AsmSaveStateForVmxoff
 ;PUBLIC AsmVmxoffAndRestoreState
 ;PUBLIC GetCs
@@ -19,6 +21,11 @@
 ;PUBLIC GetGdtLimit
 ;PUBLIC GetIdtLimit
 ;PUBLIC GetRflags
+;PUBLIC GetRsp
+
+
+extern KeStallExecutionProcessor:proc
+
 
 .data
     PUBLIC g_StackPointerForReturning
@@ -42,28 +49,48 @@ g_BasePointerForReturning dq 0
 
 
 ;------------------------------------------------------------------------
+; 
+
+AsmReadTimeStamp PROC ;PUBLIC
+   
+  
+
+   RDTSC  ;Read the timestamp counter into EDX:EAX (64-bit value)
+   
+   ret
+   
+AsmReadTimeStamp ENDP
 
 
-ReadTimeStamp PROC ;PUBLIC
+
+AsmAdd PROC ;PUBLIC
+
+    xor rax, rax
+    add rax, 5
+
+    ret
     
-   RDTSC ; Read the timestamp counter into EDX:EAX (64-bit value)
+AsmAdd ENDP
+
+
+AsmXor PROC ;PUBLIC
+
+    xor rax, rax
+
+    ret
+
+AsmXor ENDP
+
+
+
+AsmNop PROC ;PUBLIC
     
-ReadTimeStamp ENDP
-
-
-
-;------------------------------------------------------------------------
-
-AsmHltInst PROC ;PUBLIC
-    
-    guest_entry:
-        nop          ; Do nothing, but test if execution reaches here
-        xor rax, rax ; Clear RAX (simple computation test)
-        vmcall       ; Exit back to hypervisor
-        jmp guest_entry  ; If VMX doesn't exit, keep looping
+   nop
+   
+   ret
 
     
-AsmHltInst ENDP
+AsmNop ENDP
 
 
 
@@ -106,14 +133,13 @@ AsmVmxoffAndRestoreState PROC PUBLIC
 
     add rsp, 8 ;make rsp point to a correct return point
 
-    xor rax, rax
-    mov rax, 1 ; return true
+   
 
     ; return section
 
     mov rbx, [rsp+28h+8h]
     mov rsi, [rsp+28h+10h]
-    add rsp, 020h
+    add rsp, 40h
     pop rdi
 
     ret
@@ -162,6 +188,13 @@ GetEs PROC
     ret
 
 GetEs ENDP
+
+GetRsp PROC
+
+    mov rax, rsp
+        
+    ret
+GetRsp ENDP
 
 ;------------------------------------------------------------------------
 

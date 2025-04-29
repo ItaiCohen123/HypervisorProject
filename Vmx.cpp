@@ -15,11 +15,13 @@
 
 
 
+
 int ProcessorCounts;
 extern long  g_StackPointerForReturning;
 extern long g_BasePointerforReturning;
 VIRTUAL_MACHINE_STATE* g_GuestState = NULL;
 UINT64* g_VirtualGuestMemoryAddress = NULL;
+
 
 //check if vmx is supported in processor, allocate memory for each logical processor and enable vmx operations
 BOOLEAN
@@ -142,23 +144,29 @@ GetSegmentDescriptor(PSEGMENT_SELECTOR SegmentSelector,
 VOID
 FillGuestSelectorData(
     PVOID  GdtBase,
-    ULONG  Segreg,
+    ULONG  FieldBase, // Expecting GUEST_ES_SELECTOR, GUEST_CS_SELECTOR, etc.
     USHORT Selector)
 {
     SEGMENT_SELECTOR SegmentSelector = { 0 };
-    ULONG            AccessRights;
+    ULONG AccessRights = 0;
 
     GetSegmentDescriptor(&SegmentSelector, Selector, (PUCHAR)GdtBase);
-    AccessRights = ((PUCHAR)&SegmentSelector.ATTRIBUTES)[0] + (((PUCHAR)&SegmentSelector.ATTRIBUTES)[1] << 12);
 
-    if (!Selector)
-        AccessRights |= 0x10000;
+    // Build AccessRights properly
+    AccessRights = *(ULONG*)&SegmentSelector.ATTRIBUTES;  // only if your struct matches!
 
-    __vmx_vmwrite(GUEST_ES_SELECTOR + Segreg * 2, Selector);
-    __vmx_vmwrite(GUEST_ES_LIMIT + Segreg * 2, SegmentSelector.LIMIT);
-    __vmx_vmwrite(GUEST_ES_AR_BYTES + Segreg * 2, AccessRights);
-    __vmx_vmwrite(GUEST_ES_BASE + Segreg * 2, SegmentSelector.BASE);
+    if (!Selector) {
+        AccessRights |= (1 << 16);  // Unusable bit
+        SegmentSelector.BASE = 0;
+        SegmentSelector.LIMIT = 0;
+    }
+
+    __vmx_vmwrite(FieldBase + 0, Selector);
+    __vmx_vmwrite(FieldBase + 2, SegmentSelector.LIMIT);
+    __vmx_vmwrite(FieldBase + 4, AccessRights);
+    __vmx_vmwrite(FieldBase + 8, SegmentSelector.BASE);
 }
+
 ULONG AdjustControls(ULONG Ctl, ULONG Msr)
 {
     MSR MsrValue = { 0 };
@@ -180,47 +188,14 @@ ULONG AdjustControls(ULONG Ctl, ULONG Msr)
     return Ctl;
 }
 
-VOID
-ResumeToNextInstruction()
-{
-    PVOID ResumeRIP = NULL;
-    PVOID CurrentRIP = NULL;
-    ULONG ExitInstructionLength = 0;
 
-    __vmx_vmread(GUEST_RIP, (size_t*)&CurrentRIP);
-    __vmx_vmread(VM_EXIT_INSTRUCTION_LEN, (size_t*)&ExitInstructionLength);
 
-    ResumeRIP = (PCHAR)CurrentRIP + ExitInstructionLength;
-
-    __vmx_vmwrite(GUEST_RIP, (ULONG64)ResumeRIP);
-}
-VOID
-VmResumeInstruction()
-{
-    DbgPrint("inside vmresume");
-    LogMessage("\\??\\C:\\HypervisorLogs\\VmResume.txt", "inside VmResumeInstruction");
-
-    
-    ResumeToNextInstruction();
-    LoadVmcs(&g_GuestState[0]);
-    __vmx_vmresume(); // Resumes VMX non-root operation by using the current virtual machine control structure (VMCS).
-
-    // if VMRESUME succeeds will never be here !
-
-    ULONG64 ErrorCode = 0;
-    __vmx_vmread(VM_INSTRUCTION_ERROR, &ErrorCode);
-    __vmx_off();
-    DbgPrint("[*] VMRESUME Error : 0x%llx\n", ErrorCode);
-
-    
-
-}
 VOID
 MainVmexitHandler(PGUEST_REGS GuestRegs)
 {
+
     UNREFERENCED_PARAMETER(GuestRegs);
 
-    LogMessage("\\??\\C:\\HypervisorLogs\\VMExitHandler.txt", "inside MainVmExitHandler");
 
     ULONG ExitReason = 0;
     __vmx_vmread(VM_EXIT_REASON, (size_t*)&ExitReason);
@@ -233,84 +208,80 @@ MainVmexitHandler(PGUEST_REGS GuestRegs)
 
     switch (ExitReason)
     {
-        //
-        // The following instructions cause VM exits when they are executed in VMX non-root operation: CPUID, GETSEC,
-        // INVD, and XSETBV. This is also true of instructions introduced with VMX, which include: INVEPT, INVVPID,
-        // VMCALL, VMCLEAR, VMLAUNCH, VMPTRLD, VMPTRST, VMRESUME, VMXOFF, and VMXON.
-        //
-
-    case EXIT_REASON_VMCLEAR:
-    case EXIT_REASON_VMPTRLD:
-    case EXIT_REASON_VMPTRST:
-    case EXIT_REASON_VMREAD:
-    case EXIT_REASON_VMRESUME:
-    case EXIT_REASON_VMWRITE:
-    case EXIT_REASON_VMXOFF:
-    case EXIT_REASON_VMXON:
-    case EXIT_REASON_VMLAUNCH:
-    {
-        break;
-    }
+      
     case EXIT_REASON_HLT:
     {
-
-        DbgPrint("[*] Execution of HLT detected... \n");
-
-       
-        
         AsmVmxoffAndRestoreState();
 
         break;
     }
-    case EXIT_REASON_EXCEPTION_NMI:
-    {
-        break;
-    }
 
-    case EXIT_REASON_CPUID:
-    {
-        break;
-    }
-
-    case EXIT_REASON_INVD:
-    {
-        break;
-    }
-
+  
     case EXIT_REASON_VMCALL:
     {
-
+        AsmVmxoffAndRestoreState();
         DbgPrint("executing of vmcall detected");
 
+
         break;
     }
-
-    case EXIT_REASON_CR_ACCESS:
-    {
-        break;
-    }
-
-    case EXIT_REASON_MSR_READ:
-    {
-        break;
-    }
-
-    case EXIT_REASON_MSR_WRITE:
-    {
-        break;
-    }
-
     case EXIT_REASON_EPT_VIOLATION:
     {
+
+        AsmVmxoffAndRestoreState();
+
+        DbgPrint("Ept violation detected");
         break;
     }
 
     default:
     {
-        DbgPrint("[!] Unknown VM Exit Reason: 0x%x\n", ExitReason & 0xffff);
+              
+        AsmVmxoffAndRestoreState();
+
         break;
     }
     }
+}
+
+BOOLEAN ExecuteFunction() {
+
+    long long result;
+    ULONG64 guestFunc;
+    __vmx_vmread(GUEST_RIP, &guestFunc);
+
+    
+    if (guestFunc == (ULONG64)AsmReadTimeStamp) {
+
+         result = AsmReadTimeStamp();
+        DbgPrint("result of Read Time Stamp: %lld", result);
+        return TRUE;
+
+    }
+    if (guestFunc == (ULONG64)AsmAdd) {
+
+         result = AsmAdd();
+        DbgPrint("result of Add: %lld", result);
+        return TRUE;
+
+    }
+    if (guestFunc == (ULONG64)AsmXor) {
+
+         result = AsmXor();
+        DbgPrint("result of Xor: %lld", result);
+        return TRUE;
+
+    }
+    if (guestFunc == (ULONG64)AsmNop) {
+
+         AsmNop();
+       
+        return TRUE;
+
+    }
+
+    return FALSE;
+
 }
 
 BOOLEAN
@@ -350,6 +321,8 @@ SetupVmcs(VIRTUAL_MACHINE_STATE* GuestState, PEPTP EPTP, ULONG64 function) {
     // Other VMCS Fields
     VMX_CHECK_SUCCESS(__vmx_vmwrite(PAGE_FAULT_ERROR_CODE_MASK, 0), PAGE_FAULT_ERROR_CODE_MASK);
     VMX_CHECK_SUCCESS(__vmx_vmwrite(PAGE_FAULT_ERROR_CODE_MATCH, 0), PAGE_FAULT_ERROR_CODE_MATCH);
+
+
     VMX_CHECK_SUCCESS(__vmx_vmwrite(VM_EXIT_MSR_STORE_COUNT, 0), VM_EXIT_MSR_STORE_COUNT);
     VMX_CHECK_SUCCESS(__vmx_vmwrite(VM_EXIT_MSR_LOAD_COUNT, 0), VM_EXIT_MSR_LOAD_COUNT);
     VMX_CHECK_SUCCESS(__vmx_vmwrite(VM_ENTRY_MSR_LOAD_COUNT, 0), VM_ENTRY_MSR_LOAD_COUNT);
@@ -374,9 +347,9 @@ SetupVmcs(VIRTUAL_MACHINE_STATE* GuestState, PEPTP EPTP, ULONG64 function) {
 
     // Set CPU Execution Controls
     VMX_CHECK_SUCCESS(__vmx_vmwrite(CPU_BASED_VM_EXEC_CONTROL, AdjustControls(CPU_BASED_HLT_EXITING | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS, MSR_IA32_VMX_PROCBASED_CTLS)), CPU_BASED_VM_EXEC_CONTROL);
-    VMX_CHECK_SUCCESS(__vmx_vmwrite(SECONDARY_VM_EXEC_CONTROL, AdjustControls(CPU_BASED_CTL2_RDTSCP, MSR_IA32_VMX_PROCBASED_CTLS2)), SECONDARY_VM_EXEC_CONTROL);
+    VMX_CHECK_SUCCESS(__vmx_vmwrite(SECONDARY_VM_EXEC_CONTROL, AdjustControls(CPU_BASED_CTL2_RDTSCP  | CPU_BASED_CTL2_ENABLE_EPT, MSR_IA32_VMX_PROCBASED_CTLS2)), SECONDARY_VM_EXEC_CONTROL);
 
-    // Pin-Based Controls
+    // Pin-Based ControlsS
     VMX_CHECK_SUCCESS(__vmx_vmwrite(PIN_BASED_VM_EXEC_CONTROL, AdjustControls(0, MSR_IA32_VMX_PINBASED_CTLS)), PIN_BASED_VM_EXEC_CONTROL);
 
     // VM-Exit and VM-Entry Controls
@@ -425,11 +398,11 @@ SetupVmcs(VIRTUAL_MACHINE_STATE* GuestState, PEPTP EPTP, ULONG64 function) {
     VMX_CHECK_SUCCESS(__vmx_vmwrite(HOST_IA32_SYSENTER_ESP, __readmsr(MSR_IA32_SYSENTER_ESP)), HOST_IA32_SYSENTER_ESP);
 
 
-    VMX_CHECK_SUCCESS(__vmx_vmwrite(GUEST_RSP, (ULONG64)GuestState->guestStack + VMM_STACK_SIZE - 1), GUEST_RSP);
+    VMX_CHECK_SUCCESS(__vmx_vmwrite(GUEST_RSP, (ULONG64)GuestState->guestStack + VMM_STACK_SIZE - 0x10), GUEST_RSP);
     VMX_CHECK_SUCCESS(__vmx_vmwrite(GUEST_RIP, function), GUEST_RIP);
 
     // Load Host State
-    VMX_CHECK_SUCCESS(__vmx_vmwrite(HOST_RSP, (ULONG64)GuestState->vmmStack + VMM_STACK_SIZE - 1), HOST_RSP);
+    VMX_CHECK_SUCCESS(__vmx_vmwrite(HOST_RSP, (ULONG64)GuestState->vmmStack + VMM_STACK_SIZE - 0x10), HOST_RSP);
     VMX_CHECK_SUCCESS(__vmx_vmwrite(HOST_RIP, (ULONG64)asmVmexitHandler), HOST_RIP);
 
     // Final Status
@@ -446,9 +419,7 @@ LaunchVm(int ProcessorID, PEPTP EPTP, ULONG64 function)
     KeSetSystemAffinityThread(AffinityMask);
 
     DbgPrint("[*]\t\tCurrent thread is executing in %d th logical processor.\n", ProcessorID);
-
-    PAGED_CODE();
-
+    
 
     //
     // Allocate stack for the guest
@@ -479,7 +450,7 @@ LaunchVm(int ProcessorID, PEPTP EPTP, ULONG64 function)
 
 
     DbgPrint("Guest RSP: 0x%llx", g_GuestState[ProcessorID].guestStack + VMM_STACK_SIZE);
-    DbgPrint("Guest RIP: 0x%llx", AsmHltInst);
+    DbgPrint("Guest RIP: 0x%llx", function);
     DbgPrint("Host RSP: 0x%llx", g_GuestState[ProcessorID].vmmStack + VMM_STACK_SIZE);
     DbgPrint("Host RIP: 0x%llx", asmVmexitHandler);
 
@@ -528,33 +499,19 @@ LaunchVm(int ProcessorID, PEPTP EPTP, ULONG64 function)
 
     DbgPrint("[*] vmclear, vmptrld and vmcs are all ready");
     
-    DbgPrint("[*] Executing VMLAUNCH.\n");
-
 
     AsmSaveStateForVmxoff();
 
-    LogMessage("\\??\\C:\\HypervisorLogs\\VMLAUNCH.txt", "Executing vmlaunch");
-
-    // vmlaunch Places the calling app in VMX non-root operation state (VM enter) by using current VMCS
-
-   
-    
-    if (__vmx_vmlaunch() != 0) {
-        UINT64 error;
-        __vmx_vmread(VM_INSTRUCTION_ERROR, &error);
-        DbgPrint("[*] VMLAUNCH failed with error code: %llu\n", error);
+    if (!ExecuteFunction()) {
         goto ErrorReturn;
     }
-
-
- 
-    
-    __vmx_off();      
     
 
-    DbgPrint("\n===================================================================\n");
 
+    DbgPrint("[*] Executed function successfully");
 
+    TerminateSingleThread(&g_GuestState[ProcessorID]);
+    
 
     return TRUE;
     
@@ -576,20 +533,10 @@ ErrorReturn:
     }
 
 
-    DbgPrint("[*] Fail to setup VMCS !\n");
+    DbgPrint("[*] Error in setting up vm or Executing\n");
     return FALSE;   
 }
-// stores the pointer to the current VMCS at the specified address
-UINT64
-VmptrstInstruction() 
-{
-    PHYSICAL_ADDRESS vmcspa;
-    vmcspa.QuadPart = 0;
-    __vmx_vmptrst((unsigned __int64*)&vmcspa);
 
-
-    return 0;
-}
 
 // free memory for each logical processor and call vmx off which deactivates VMX operation in the processor
 
@@ -606,11 +553,40 @@ TerminateVmx()
         KeSetSystemAffinityThread(AffinityMask);
         DbgPrint("\t\tCurrent thread is executing in %zu th logical processor.\n", i);
 
-        __vmx_off();
-        MmFreeContiguousMemory(PhysicalToVirtualAddress(g_GuestState[i].VmxonRegion));
-        MmFreeContiguousMemory(PhysicalToVirtualAddress(g_GuestState[i].VmcsRegion));
+        if (g_GuestState[i].VmxonRegion != NULL && g_GuestState[i].VmcsRegion != NULL)
+        {
+            __vmx_off();
+            MmFreeContiguousMemory(PhysicalToVirtualAddress(g_GuestState[i].VmxonRegion));
+            MmFreeContiguousMemory(PhysicalToVirtualAddress(g_GuestState[i].VmcsRegion));
+        }
     }
 
     DbgPrint("[*] VMX Operation turned off successfully. \n");
+}
+VOID
+TerminateSingleThread(VIRTUAL_MACHINE_STATE* GuestState) {
+
+
+    DbgPrint("[*] Terminating vmx and cleaning up a single thread");
+
+    
+    if (GuestState->VmxonRegion) {
+
+        MmFreeContiguousMemory(PhysicalToVirtualAddress(GuestState->VmxonRegion));
+        GuestState->VmxonRegion = NULL;
+
+    }
+    if (GuestState->VmcsRegion) {
+
+        MmFreeContiguousMemory(PhysicalToVirtualAddress(GuestState->VmcsRegion));
+        GuestState->VmcsRegion = NULL;
+
+    }
+ 
+
+    
+
+   
+
 }
 

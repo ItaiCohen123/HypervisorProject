@@ -44,6 +44,7 @@ namespace HypervisorApp
 
             VmStart vmStartForm = new VmStart(hDrv, this);
             vmStartForm.Show();
+            this.WindowState = FormWindowState.Minimized;
             
 
         }
